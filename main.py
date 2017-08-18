@@ -5,6 +5,30 @@ import pickle as pk
 import hashlib as hs
 
 
+class TreeData():
+    def __init__(self,ast_tree):
+        hasher = hs.sha512()
+        nodes = get_all_nodes(ast_tree)
+        hasher.update(bytes(ast.dump(ast_tree), 'utf-8'))
+        self.hash = hasher.digest()
+        self.function_declarations = get_all_functions(nodes)
+        self.function_calls = get_all_functions_calls(nodes)
+        
+    
+    
+    def __eq__(self,other):
+        return self.hash == other.hash
+
+
+    def __ne__(self,other):
+        return not self.__eq__(other)
+
+    def generate_test_file(self,file_name):
+        with open(file_name,'w') as handle:
+            module_name = file_name.split('_')[1].split('.')[0]
+            handle.writelines('import %s as module' % (module_name))
+
+
 def get_all_nodes(ast_tree):
     return [n for n in ast.walk(ast_tree)]
 
@@ -22,21 +46,10 @@ def parse_ast(file_name):
         return ast.parse(handle.read(), filename=file_name)
 
 
-def create_serial_object(ast_tree):
-    obj = []
-    hasher = hs.sha512()
-    nodes = get_all_nodes(ast_tree)
-    hasher.update(bytes(ast.dump(ast_tree), 'utf-8'))
-    ident = hasher.digest()
-    obj.append(ident)
-    obj.append(get_all_functions(nodes))
-    obj.append(get_all_functions_calls(nodes))
-    return obj
 
-
-def serialize_tree_data(file_name, ast_tree):
+def serialize_tree_data(file_name, tree_data):
     with open(file_name, 'wb') as handle:
-        pk.dump(create_serial_object(ast_tree), handle)
+        pk.dump(tree_data, handle)
 
 
 def un_serialize_tree_data(file_name):
@@ -44,22 +57,18 @@ def un_serialize_tree_data(file_name):
         return pk.load(handle)
 
 
-def compare_tree_data_objects(a,b):
-    if a[0] == b[0]:
-        return True
-    return False  
-
-
 if __name__ == "__main__":
     for filename in sys.argv[1:]:
-        tree = parse_ast(filename)
+        tree = TreeData(parse_ast(filename))
         data_name = 'data_' + filename.split('.')[0] + '.pk'
         if not os.path.isfile(data_name):
             serialize_tree_data(data_name, tree)
-        elif compare_tree_data_objects(create_serial_object(tree), un_serialize_tree_data(data_name)):
+        elif tree == un_serialize_tree_data(data_name):
             print('No changes')
         else:
-            print('Changes')
+            print('Changes Generating new Test File')
+            tree.generate_test_file('test_' + filename.split('.')[0] + '.py')
+
 
 
 
